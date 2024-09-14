@@ -15,14 +15,7 @@ impl Hash for PyObjectWrapper {
 
 impl PartialEq for PyObjectWrapper {
     fn eq(&self, other: &Self) -> bool {
-        Python::with_gil(|py| {
-            self.obj
-                .bind(py)
-                .rich_compare(other.obj.bind(py), pyo3::basic::CompareOp::Eq)
-                .unwrap()
-                .extract::<bool>()
-                .unwrap()
-        })
+        Python::with_gil(|py| self.obj.bind(py).eq(other.obj.bind(py)).unwrap())
     }
 }
 
