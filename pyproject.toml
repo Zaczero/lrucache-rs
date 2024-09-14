@@ -18,7 +18,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = []
-description = "Dict-based LRUCache in Rust"
+description = "Dict-like LRUCache in Rust"
 dynamic = ["version"]
 keywords = ["lrucache", "lru", "cache", "caching"]
 name = "lrucache-rs"
