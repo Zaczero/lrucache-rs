@@ -1,6 +1,7 @@
+from collections.abc import Hashable
 from typing import Generic, TypeVar, overload
 
-_K = TypeVar('_K')
+_K = TypeVar('_K', bound=Hashable)
 _V = TypeVar('_V')
 _D = TypeVar('_D')
 
