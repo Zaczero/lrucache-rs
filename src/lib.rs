@@ -1,27 +1,49 @@
-use pyo3::{exceptions::PyValueError, intern, prelude::*};
+use ordered_hash_map::OrderedHashMap;
+use pyo3::{exceptions::PyValueError, prelude::*};
+use std::hash::{Hash, Hasher};
+
+struct PyObjectWrapper {
+    hash: isize,
+    obj: PyObject,
+}
+
+impl Hash for PyObjectWrapper {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.hash.hash(state);
+    }
+}
+
+impl PartialEq for PyObjectWrapper {
+    fn eq(&self, other: &Self) -> bool {
+        Python::with_gil(|py| {
+            self.obj
+                .bind(py)
+                .rich_compare(other.obj.bind(py), pyo3::basic::CompareOp::Eq)
+                .unwrap()
+                .extract::<bool>()
+                .unwrap()
+        })
+    }
+}
+
+impl Eq for PyObjectWrapper {}
 
 #[pyclass]
 struct LRUCache {
-    size: usize,
     maxsize: usize,
-    cache: PyObject,
+    cache: OrderedHashMap<PyObjectWrapper, PyObject>,
 }
 
 #[pymethods]
 impl LRUCache {
     #[new]
-    fn new(py: Python, maxsize: usize) -> PyResult<Self> {
+    fn new(maxsize: usize) -> PyResult<Self> {
         if maxsize == 0 {
             Err(PyValueError::new_err("maxsize must be positive"))
         } else {
             Ok(Self {
-                size: 0,
                 maxsize,
-                cache: py
-                    .import_bound(intern!(py, "collections"))?
-                    .getattr(intern!(py, "OrderedDict"))?
-                    .call0()?
-                    .into(),
+                cache: OrderedHashMap::with_capacity(maxsize),
             })
         }
     }
@@ -32,47 +54,38 @@ impl LRUCache {
         key: PyObject,
         value: PyObject,
     ) -> PyResult<()> {
-        if self_
-            .cache
-            .call_method1(py, intern!(py, "__contains__"), (&key,))?
-            .extract::<bool>(py)?
-        {
-            self_
-                .cache
-                .call_method1(py, intern!(py, "move_to_end"), (&key,))?;
+        let key = PyObjectWrapper {
+            hash: key.bind(py).hash().unwrap(),
+            obj: key,
+        };
+        if let Some(_) = self_.cache.get(&key) {
+            self_.cache.move_to_back(&key);
         } else {
-            if self_.size >= self_.maxsize {
-                self_
-                    .cache
-                    .call_method1(py, intern!(py, "popitem"), (/*last=*/ false,))?;
-                self_.size -= 1;
+            if self_.cache.len() == self_.maxsize {
+                self_.cache.pop_front();
             }
-            self_
-                .cache
-                .call_method1(py, intern!(py, "__setitem__"), (&key, &value))?;
-            self_.size += 1;
+            self_.cache.insert(key, value);
         }
         Ok(())
     }
 
     #[pyo3(signature = (key, /, default=None))]
     fn get(
-        self_: PyRef<'_, Self>,
+        mut self_: PyRefMut<'_, Self>,
         py: Python,
         key: PyObject,
         default: Option<PyObject>,
     ) -> PyResult<PyObject> {
-        let value = self_
-            .cache
-            .call_method1(py, intern!(py, "get"), (&key, &self_))?
-            .extract::<PyObject>(py)?;
-        if value.is(&self_) {
-            Ok(default.unwrap_or_else(|| py.None()))
+        let key = PyObjectWrapper {
+            hash: key.bind(py).hash().unwrap(),
+            obj: key,
+        };
+        if let Some(value) = self_.cache.get(&key) {
+            let result = value.clone_ref(py);
+            self_.cache.move_to_back(&key);
+            Ok(result)
         } else {
-            self_
-                .cache
-                .call_method1(py, intern!(py, "move_to_end"), (&key,))?;
-            Ok(value)
+            Ok(default.unwrap_or_else(|| py.None()))
         }
     }
 }
