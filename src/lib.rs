@@ -54,7 +54,7 @@ impl LRUCache {
         if let Some(_) = self_.cache.get(&key) {
             self_.cache.move_to_back(&key);
         } else {
-            if self_.cache.len() == self_.maxsize {
+            if self_.cache.len() >= self_.maxsize {
                 self_.cache.pop_front();
             }
             self_.cache.insert(key, value);
