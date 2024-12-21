@@ -8,7 +8,7 @@ An efficient LRU cache written in Rust with Python bindings. Unlike other LRU ca
 
 ## Installation
 
-The recommended installation method is through the PyPI package manager. The project is implemented in Rust and several pre-built binary wheels are available for Linux, macOS, and Windows, with support for both x64 and ARM architectures.
+Pre-built binary wheels are available for Linux, macOS, and Windows, with support for both x64 and ARM architectures.
 
 ```sh
 pip install lrucache-rs
