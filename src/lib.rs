@@ -1,5 +1,9 @@
 use ordered_hash_map::OrderedHashMap;
-use pyo3::{exceptions::PyValueError, prelude::*};
+use pyo3::{
+    exceptions::{PyKeyError, PyValueError},
+    prelude::*,
+    types::{PyIterator, PyTuple},
+};
 use std::hash::{Hash, Hasher};
 
 struct PyObjectWrapper {
@@ -41,44 +45,85 @@ impl LRUCache {
         }
     }
 
-    fn __setitem__(
-        mut self_: PyRefMut<'_, Self>,
-        py: Python,
-        key: PyObject,
-        value: PyObject,
-    ) -> PyResult<()> {
+    fn __len__(&self) -> usize {
+        self.cache.len()
+    }
+
+    fn __contains__(&self, py: Python, key: PyObject) -> bool {
+        self.cache.contains_key(&PyObjectWrapper {
+            hash: key.bind(py).hash().unwrap(),
+            obj: key,
+        })
+    }
+
+    fn __iter__<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyIterator>> {
+        let objects: Vec<PyObject> = self.cache.keys().map(|key| key.obj.clone_ref(py)).collect();
+        let tuple = PyTuple::new(py, objects)?;
+        PyIterator::from_object(tuple.as_any())
+    }
+
+    fn __setitem__(&mut self, py: Python, key: PyObject, value: PyObject) {
         let key = PyObjectWrapper {
             hash: key.bind(py).hash().unwrap(),
             obj: key,
         };
-        if let Some(_) = self_.cache.get(&key) {
-            self_.cache.move_to_back(&key);
+        if let Some(_) = self.cache.get(&key) {
+            self.cache.move_to_back(&key);
         } else {
-            if self_.cache.len() >= self_.maxsize {
-                self_.cache.pop_front();
+            if self.cache.len() >= self.maxsize {
+                self.cache.pop_front();
             }
-            self_.cache.insert(key, value);
+            self.cache.insert(key, value);
         }
-        Ok(())
+        ()
+    }
+
+    fn __getitem__(&mut self, py: Python, key: PyObject) -> PyResult<PyObject> {
+        let cache_key = PyObjectWrapper {
+            hash: key.bind(py).hash().unwrap(),
+            obj: key.clone_ref(py),
+        };
+        if let Some(value) = self.cache.get(&cache_key) {
+            let result = value.clone_ref(py);
+            self.cache.move_to_back(&cache_key);
+            Ok(result)
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py)
+                    .repr()
+                    .map_or(String::from("key not found"), |s| s.to_string()),
+            ))
+        }
+    }
+
+    fn __delitem__(&mut self, py: Python, key: PyObject) -> PyResult<()> {
+        let cache_key = PyObjectWrapper {
+            hash: key.bind(py).hash().unwrap(),
+            obj: key.clone_ref(py),
+        };
+        if let Some(_) = self.cache.remove(&cache_key) {
+            Ok(())
+        } else {
+            Err(PyKeyError::new_err(
+                key.bind(py)
+                    .repr()
+                    .map_or(String::from("key not found"), |s| s.to_string()),
+            ))
+        }
     }
 
     #[pyo3(signature = (key, /, default=None))]
-    fn get(
-        mut self_: PyRefMut<'_, Self>,
-        py: Python,
-        key: PyObject,
-        default: Option<PyObject>,
-    ) -> PyResult<PyObject> {
-        let key = PyObjectWrapper {
+    fn get(&mut self, py: Python, key: PyObject, default: Option<PyObject>) -> PyObject {
+        let cache_key = PyObjectWrapper {
             hash: key.bind(py).hash().unwrap(),
             obj: key,
         };
-        if let Some(value) = self_.cache.get(&key) {
+        if let Some(value) = self.cache.get(&cache_key) {
             let result = value.clone_ref(py);
-            self_.cache.move_to_back(&key);
-            Ok(result)
+            self.cache.move_to_back(&cache_key);
+            result
         } else {
-            Ok(default.unwrap_or_else(|| py.None()))
+            default.unwrap_or_else(|| py.None())
         }
     }
 }
