@@ -9,7 +9,7 @@ name = "lrucache_rs"
 
 [dependencies]
 ordered_hash_map = "0.4.0"
-pyo3 = { version = "0.22.5", features = ["abi3-py39", "extension-module"] }
+pyo3 = { version = "0.23.3", features = ["abi3-py39", "extension-module"] }
 
 [profile.release]
 overflow-checks = true
